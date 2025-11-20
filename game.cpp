@@ -23,6 +23,8 @@ static int g_flippedCount = 0;
 static int g_firstIndex = -1;
 static int g_secondIndex = -1;
 static BOOL g_locked = FALSE;
+static int g_blinkStep = 0;
+static BOOL g_blinking = FALSE;
 
 int IndexFromPoint(int x, int y) {
     POINT pt;
@@ -99,6 +101,18 @@ void DrawCard(HDC hdc, const Card* card) {
     }
 
     if (card->flipped) {
+        BOOL isBlinkTarget = (g_blinking &&
+            (&g_cards[g_firstIndex] == card || &g_cards[g_secondIndex] == card));
+
+        if (isBlinkTarget) {
+            if (g_blinkStep % 2 == 0) {
+                HBRUSH b = CreateSolidBrush(RGB(51, 255, 51));
+                FillRect(hdc, &inner, b);
+                DeleteObject(b);
+                return;
+            }
+        }
+
         HBRUSH b = CreateSolidBrush(RGB(255, 204, 204));//RGB(240, 240, 255));
         FillRect(hdc, &inner, b);
         DeleteObject(b);
@@ -153,20 +167,24 @@ void CheckForMatch() {
     if (g_firstIndex >= 0 && g_secondIndex >= 0) {
         Card* a = &g_cards[g_firstIndex];
         Card* b = &g_cards[g_secondIndex];
+
         if (a->value == b->value) {
-            a->matched = TRUE;
-            b->matched = TRUE;
-            g_flippedCount += 2;
-            g_firstIndex = g_secondIndex = -1;
-            g_locked = FALSE;
+            g_blinking = TRUE;
+            g_blinkStep = 0;
+
+            SetTimer(g_hWnd, 2, 150, NULL);
+
+            g_locked = TRUE;
         }
         else {
             g_locked = TRUE;
             SetTimer(g_hWnd, 1, FLIP_BACK_MS, NULL);
         }
+
         InvalidateRect(g_hWnd, NULL, TRUE);
     }
 }
+
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -216,7 +234,29 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_locked = FALSE;
             InvalidateRect(hWnd, NULL, TRUE);
         }
+        else if (wParam == 2) {
+            g_blinkStep++;
+
+            if (g_blinkStep >= 6) { 
+                KillTimer(hWnd, 2);
+
+                g_cards[g_firstIndex].matched = TRUE;
+                g_cards[g_secondIndex].matched = TRUE;
+
+                g_flippedCount += 2;
+                g_firstIndex = g_secondIndex = -1;
+
+                g_blinking = FALSE;
+                g_locked = FALSE;
+
+                InvalidateRect(hWnd, NULL, TRUE);
+            }
+            else {
+                InvalidateRect(hWnd, NULL, FALSE);
+            }
+        }
         break;
+
 
     case WM_PAINT: {
         PAINTSTRUCT ps;

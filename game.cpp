@@ -1,18 +1,11 @@
-// memory_win95.cpp
-// Compile (MSVC VC6): cl /EHsc memory_win95.cpp user32.lib gdi32.lib
-// Compile (MinGW): g++ memory_win95.cpp -o memory.exe -lgdi32 -luser32
-//
-// Designed to run on legacy Windows 95 / VC6 environments.
-// Uses ANSI Win32 APIs only (CreateFontA, DrawTextA, CreateWindowA, etc).
-
 #include <windows.h>
 
 #define COLS 4
-#define ROWS 4
+#define ROWS 3
 #define CARD_COUNT (COLS * ROWS)
 #define CARD_W 120
-#define CARD_H 160
-#define GAP 12
+#define CARD_H 120
+#define GAP 0
 #define BORDER 16
 #define FLIP_BACK_MS 800
 
@@ -31,7 +24,6 @@ static int g_firstIndex = -1;
 static int g_secondIndex = -1;
 static BOOL g_locked = FALSE;
 
-// Helper: index from client point
 int IndexFromPoint(int x, int y) {
     POINT pt;
     pt.x = x;
@@ -44,7 +36,6 @@ int IndexFromPoint(int x, int y) {
     return -1;
 }
 
-// Simple Fisher-Yates shuffle using rand() seeded by GetTickCount
 void ShuffleIntArray(int* arr, int n) {
     unsigned int seed = (unsigned int)GetTickCount();
     srand((unsigned int)(seed ^ 0xA5A5A5A5));
@@ -73,7 +64,7 @@ void StartNewGame() {
         for (int c = 0; c < COLS; ++c) {
             int i = r * COLS + c;
             int x = BORDER + c * (CARD_W + GAP);
-            int y = BORDER + r * (CARD_H + GAP) + 28; // leave room for title
+            int y = BORDER + r * (CARD_H + GAP) + 28;
             g_cards[i].rect.left = x;
             g_cards[i].rect.top = y;
             g_cards[i].rect.right = x + CARD_W;
@@ -85,7 +76,6 @@ void StartNewGame() {
     }
 
     if (g_hWnd) {
-        // Resize window client area to fit board (optional)
         int width = BORDER * 2 + COLS * CARD_W + (COLS - 1) * GAP;
         int height = BORDER * 2 + ROWS * CARD_H + (ROWS - 1) * GAP + 40;
         RECT rc = { 0, 0, width, height };
@@ -94,9 +84,7 @@ void StartNewGame() {
     }
 }
 
-// Draw a single card using safe SelectObject usage
 void DrawCard(HDC hdc, const Card* card) {
-    // Draw frame using stock black brush (cast to HBRUSH and do not delete)
     HBRUSH hFrame = (HBRUSH)GetStockObject(BLACK_BRUSH);
     FrameRect(hdc, &card->rect, hFrame);
 
@@ -111,14 +99,12 @@ void DrawCard(HDC hdc, const Card* card) {
     }
 
     if (card->flipped) {
-        // light background
-        HBRUSH b = CreateSolidBrush(RGB(240, 240, 255));
+        HBRUSH b = CreateSolidBrush(RGB(255, 204, 204));//RGB(240, 240, 255));
         FillRect(hdc, &inner, b);
         DeleteObject(b);
 
-        // colored circle representing value
         int cx = (inner.left + inner.right) / 2;
-        int cy = inner.top + 40;
+        int cy = (inner.top + inner.bottom) / 2;//inner.top + 40;
         int radius = 36;
         int R = 180 + (card->value * 17) % 75;
         int G = 90 + (card->value * 31) % 120;
@@ -127,37 +113,30 @@ void DrawCard(HDC hdc, const Card* card) {
         HBRUSH cb = CreateSolidBrush(RGB(R, G, B));
         HGDIOBJ oldBrush = SelectObject(hdc, cb);
 
-        // use null pen for filled ellipse border experience
         HPEN hNullPen = (HPEN)GetStockObject(NULL_PEN);
         HGDIOBJ oldPen = SelectObject(hdc, hNullPen);
 
         Ellipse(hdc, cx - radius, cy - radius, cx + radius, cy + radius);
 
-        // restore
         SelectObject(hdc, oldPen);
         SelectObject(hdc, oldBrush);
-        // do not DeleteObject(NULL_PEN or stock brush)
         DeleteObject(cb);
 
-        // draw number text
         char buf[16];
         wsprintfA(buf, "%d", card->value);
 
-        // select font and draw text centered top
         HGDIOBJ oldFont = SelectObject(hdc, g_hFont);
         SetBkMode(hdc, TRANSPARENT);
         RECT textRc = inner;
-        // text top aligned
-        DrawTextA(hdc, buf, -1, &textRc, DT_CENTER | DT_TOP);
+        DWORD dwFormat = DT_CENTER | DT_VCENTER | DT_SINGLELINE;
+        DrawTextA(hdc, buf, -1, &textRc, dwFormat);
         SelectObject(hdc, oldFont);
     }
     else {
-        // back of card design
         HBRUSH b = CreateSolidBrush(RGB(80, 120, 200));
         FillRect(hdc, &inner, b);
         DeleteObject(b);
 
-        // simple horizontal stripes
         int step = 12;
         HPEN hPen = CreatePen(PS_SOLID, 1, RGB(60, 90, 170));
         HGDIOBJ oldPen2 = SelectObject(hdc, hPen);
@@ -192,7 +171,6 @@ void CheckForMatch() {
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE: {
-        // Use ANSI CreateFontA and a font that exists on Win95
         g_hFont = CreateFontA(
             20, 0, 0, 0, FW_BOLD,
             FALSE, FALSE, FALSE,
@@ -204,7 +182,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             "MS Sans Serif"
         );
 
-        // start a new game
         StartNewGame();
         break;
     }
@@ -245,36 +222,40 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
 
-        // background
         RECT rcClient;
         GetClientRect(hWnd, &rcClient);
         HBRUSH bg = CreateSolidBrush(RGB(40, 44, 52));
         FillRect(hdc, &rcClient, bg);
         DeleteObject(bg);
 
-        // title (use DrawTextA)
         RECT titleRect = { 10, 4, 500, 30 };
         HGDIOBJ oldFont = SelectObject(hdc, g_hFont);
         SetTextColor(hdc, RGB(255, 255, 255));
         SetBkMode(hdc, TRANSPARENT);
-        DrawTextA(hdc, "Memory - 4x4 (Win95)", -1, &titleRect, DT_LEFT | DT_TOP);
+        DWORD dwFormat = DT_CENTER | DT_VCENTER | DT_SINGLELINE;
+        DrawTextA(hdc, "Memory Card Game - 4x3", -1, &titleRect, dwFormat);
         SelectObject(hdc, oldFont);
 
-        // draw cards
         for (int i = 0; i < CARD_COUNT; ++i) {
             DrawCard(hdc, &g_cards[i]);
         }
 
-        // status
-        RECT statusRect = { 10, rcClient.bottom - 28, rcClient.right - 10, rcClient.bottom };
+        RECT statusRect = { 30 + 36, rcClient.bottom - 50, rcClient.right - 50, rcClient.bottom };
         char status[128];
         if (g_flippedCount == CARD_COUNT)
-            wsprintfA(status, "Chuc mung! Ban da ghep het bai. N de choi lai.");
+            wsprintfA(status, "CHUC MUNG !!! BAN DA GHEP HET BAI. N DE CHOI LAI.");
         else
-            wsprintfA(status, "Click de lat bai. Gheptat ca cap. N de choi lai.");
+            wsprintfA(status, "CLICK DE LAT BAI -- GHEP TAT CA CAC CAP -- N DE CHOI LAI");
+        // cre: noob game for Vu Do Phuong Dong, Nguyen Xuan Duc and Tran Duy Anh <333
+        char cre[100];
+        wsprintfA(cre, "Cre: Dong, Duc, DAnh :)");
+        SetTextColor(hdc, RGB(225, 255, 51));
+
+        RECT creRect = { rcClient.right - 160, rcClient.bottom - 18, rcClient.right - 10, rcClient.bottom };
+        DrawTextA(hdc, cre, -1, &creRect, DT_VCENTER | DT_SINGLELINE);
 
         SetTextColor(hdc, RGB(220, 220, 220));
-        DrawTextA(hdc, status, -1, &statusRect, DT_LEFT | DT_TOP);
+        DrawTextA(hdc, status, -1, &statusRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
         EndPaint(hWnd, &ps);
         break;
@@ -314,7 +295,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         return 0;
     }
 
-    g_hWnd = CreateWindowA(CLASS_NAME, "Memory - 4x4 (Win95)",
+    g_hWnd = CreateWindowA(CLASS_NAME, "Memory - 4x3 (Win95)",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 640, 520,
         NULL, NULL, hInstance, NULL);

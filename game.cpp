@@ -26,6 +26,7 @@ static BOOL g_locked = FALSE;
 static int g_blinkStep = 0;
 static BOOL g_blinking = FALSE;
 
+int countGame = 0;
 int IndexFromPoint(int x, int y) {
     POINT pt;
     pt.x = x;
@@ -77,13 +78,14 @@ void StartNewGame() {
         }
     }
 
-    if (g_hWnd) {
+    if (g_hWnd && !countGame) {
         int width = BORDER * 2 + COLS * CARD_W + (COLS - 1) * GAP;
         int height = BORDER * 2 + ROWS * CARD_H + (ROWS - 1) * GAP + 40;
         RECT rc = { 0, 0, width, height };
         AdjustWindowRectEx(&rc, WS_OVERLAPPEDWINDOW, FALSE, 0);
         SetWindowPos(g_hWnd, NULL, 0, 0, rc.right - rc.left, rc.bottom - rc.top, SWP_NOMOVE | SWP_NOZORDER);
     }
+    countGame++;
 }
 
 void DrawCard(HDC hdc, const Card* card) {
